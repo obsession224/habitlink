@@ -26,6 +26,29 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// One-time setup: set webhook on Telegram
+app.get('/api/setup-webhook', async (_req, res) => {
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const APP_URL = process.env.APP_URL || 'https://habitlink-z4ys.onrender.com';
+  if (!BOT_TOKEN) return res.json({ error: 'No bot token' });
+
+  const webhookUrl = `${APP_URL}/api/webhook`;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ['message', 'callback_query']
+      })
+    });
+    const data = await r.json();
+    res.json({ webhook_url: webhookUrl, result: data });
+  } catch (err: any) {
+    res.json({ error: err.message });
+  }
+});
+
 // Webhook — no auth (Telegram sends updates here)
 app.use('/api/webhook', webhookRouter);
 
