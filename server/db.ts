@@ -152,19 +152,26 @@ export function getHabits(userId: number) {
     ORDER BY h.created_at ASC
   `).all(userId) as any[];
 
-  // Get habits shared with this user by friends
-  // Use comma-boundary matching: [123,456] -> ,123,456, then check for ,userId,
-  const sharedHabits = db.prepare(`
+  // Get ALL habits from other users that might be shared with this user
+  const allOtherHabits = db.prepare(`
     SELECT h.*, GROUP_CONCAT(hf.friend_id) as friend_id_str, u.name as owner_name
     FROM habits h
     LEFT JOIN habit_friends hf ON h.id = hf.habit_id
     JOIN users u ON u.id = h.owner_id
     WHERE h.owner_id != ?
-      AND (',' || REPLACE(REPLACE(h.shared_with, '[', ''), ']', '') || ',')
-          LIKE '%,' || ? || ',%'
     GROUP BY h.id
     ORDER BY h.created_at ASC
-  `).all(userId, userId) as any[];
+  `).all(userId) as any[];
+
+  // Filter: only keep habits where shared_with array contains userId
+  const sharedHabits = allOtherHabits.filter(h => {
+    try {
+      const arr = JSON.parse(h.shared_with || '[]');
+      return Array.isArray(arr) && arr.includes(userId);
+    } catch {
+      return false;
+    }
+  });
 
   const allHabits = [...ownHabits, ...sharedHabits];
 

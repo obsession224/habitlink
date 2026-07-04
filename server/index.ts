@@ -26,6 +26,16 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug: check database state (remove after debugging)
+import db from './db';
+app.get('/api/debug', (_req, res) => {
+  const users = db.prepare('SELECT id, name, username FROM users').all();
+  const habits = db.prepare('SELECT id, user_id, owner_id, name, shared_with FROM habits').all();
+  const friendships = db.prepare('SELECT * FROM friendships').all();
+  const history = db.prepare('SELECT habit_id, user_id, day_index, done FROM habit_history LIMIT 20').all();
+  res.json({ users, habits, friendships, historySample: history });
+});
+
 // One-time setup: set webhook on Telegram
 app.get('/api/setup-webhook', async (_req, res) => {
   const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
