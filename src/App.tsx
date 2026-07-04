@@ -94,7 +94,7 @@ export default function App() {
 
   // API Config
   const API_BASE_URL = '/api';
-  const TG_USER_ID = user.id || 123456;
+  const TG_USER_ID = user.id || 0;
 
   // Ref to trigger animations sequentially
   const [animateCards, setAnimateCards] = useState(false);
@@ -137,15 +137,30 @@ export default function App() {
       tg.expand();
       tg.MainButton?.hide();
       
-      // Load user data if available
-      const tgUser = tg.initDataUnsafe?.user;
-      if (tgUser) {
-        setUser({
-          id: tgUser.id,
-          name: tgUser.first_name,
-          username: tgUser.username,
-          photo_url: tgUser.photo_url,
-        });
+      // Load user data — may need retry as initDataUnsafe can populate asynchronously
+      const loadTgUser = () => {
+        const tgUser = tg.initDataUnsafe?.user;
+        if (tgUser && tgUser.id) {
+          setUser({
+            id: tgUser.id,
+            name: tgUser.first_name,
+            username: tgUser.username,
+            photo_url: tgUser.photo_url,
+          });
+          return true;
+        }
+        return false;
+      };
+
+      if (!loadTgUser()) {
+        // Retry up to 5 times with 200ms intervals
+        let attempts = 0;
+        const retryInterval = setInterval(() => {
+          attempts++;
+          if (loadTgUser() || attempts >= 5) {
+            clearInterval(retryInterval);
+          }
+        }, 200);
       }
     }
 
@@ -205,6 +220,7 @@ export default function App() {
 
   // --- LOAD INITIAL DATA & API ---
   useEffect(() => {
+    if (!TG_USER_ID) return;
     let active = true;
 
     // Load static mockup or localStorage backups first for instantaneous rendering
@@ -290,7 +306,7 @@ export default function App() {
 
   // --- POLLING: fetch friends, requests & shared habits every 10s ---
   useEffect(() => {
-    if (!TG_USER_ID || TG_USER_ID === 123456) return;
+    if (!TG_USER_ID) return;
 
     const poll = () => {
       // Fetch habits (includes shared habits from friends)
@@ -827,6 +843,13 @@ export default function App() {
             {currentScreen === 'main' && (
               <div className="px-4 py-5 max-w-md mx-auto">
                 
+                {/* Warning if not in Telegram */}
+                {!user.id && (
+                  <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm font-medium text-center">
+                    Откройте приложение через Telegram-бота для авторизации
+                  </div>
+                )}
+
                 {/* Приветствие пользователя */}
                 <section className="mb-6 animate-fade-in-up">
                   <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
