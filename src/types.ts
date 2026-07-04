@@ -14,6 +14,9 @@ export interface Habit {
   friendIds?: number[]; // list of friend IDs invited/linked to this habit
   color: string; // hex color or color index
   history: boolean[]; // 7 boolean values for the past 7 days (including today)
+  owner_id?: number; // ID of the habit creator
+  owner_name?: string; // Name of the habit creator
+  shared_with?: number[]; // list of user IDs this habit is shared with
 }
 
 export interface Friend {

@@ -879,10 +879,15 @@ export default function App() {
                             <p className="text-[13px] text-[var(--text-secondary)] mt-1 line-clamp-2 leading-relaxed">
                               {h.description}
                             </p>
-                            <div className="mt-2.5 flex">
+                            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
                               <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-md bg-[var(--chip-bg)] text-[var(--text-secondary)]">
                                 {h.frequency}
                               </span>
+                              {h.owner_name && h.owner_id !== user.id && (
+                                <span className="inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#4A90D9]/10 text-[#4A90D9]">
+                                  от {h.owner_name}
+                                </span>
+                              )}
                             </div>
                           </div>
 

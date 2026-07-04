@@ -33,22 +33,27 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS habits (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL,
+    owner_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
     frequency TEXT DEFAULT '🔥 Ежедневно',
     periodicity_type TEXT DEFAULT 'daily',
     periodicity_days TEXT DEFAULT '[]',
     color TEXT DEFAULT '#4A90D9',
+    shared_with TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (owner_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS habit_history (
     habit_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
     day_index INTEGER NOT NULL,
     done BOOLEAN DEFAULT 0,
-    PRIMARY KEY (habit_id, day_index),
-    FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+    PRIMARY KEY (habit_id, user_id, day_index),
+    FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS habit_friends (
@@ -101,7 +106,8 @@ export function getUserByUsername(username: string) {
 }
 
 export function getHabits(userId: number) {
-  const habits = db.prepare(`
+  // Get own habits
+  const ownHabits = db.prepare(`
     SELECT h.*, GROUP_CONCAT(hf.friend_id) as friend_id_str
     FROM habits h
     LEFT JOIN habit_friends hf ON h.id = hf.habit_id
@@ -110,8 +116,22 @@ export function getHabits(userId: number) {
     ORDER BY h.created_at ASC
   `).all(userId) as any[];
 
-  return habits.map(h => {
-    const history = db.prepare('SELECT day_index, done FROM habit_history WHERE habit_id = ?').all(h.id) as any[];
+  // Get habits shared with this user by friends
+  const sharedHabits = db.prepare(`
+    SELECT h.*, GROUP_CONCAT(hf.friend_id) as friend_id_str, u.name as owner_name
+    FROM habits h
+    LEFT JOIN habit_friends hf ON h.id = hf.habit_id
+    JOIN users u ON u.id = h.owner_id
+    WHERE h.shared_with LIKE '%' || ? || '%'
+      AND h.owner_id != ?
+    GROUP BY h.id
+    ORDER BY h.created_at ASC
+  `).all(userId, userId) as any[];
+
+  const allHabits = [...ownHabits, ...sharedHabits];
+
+  return allHabits.map(h => {
+    const history = db.prepare('SELECT day_index, done FROM habit_history WHERE habit_id = ? AND user_id = ?').all(h.id, userId) as any[];
     const historyArray = [false, false, false, false, false, false, false];
     history.forEach(r => { historyArray[r.day_index] = !!r.done; });
 
@@ -128,34 +148,47 @@ export function getHabits(userId: number) {
       friend_ids: friendIds,
       color: h.color,
       history: historyArray,
+      owner_id: h.owner_id,
+      owner_name: h.owner_name || null,
+      shared_with: JSON.parse(h.shared_with || '[]'),
     };
   });
 }
 
 export function createHabit(userId: number, habit: any) {
+  const friendIds = habit.friendIds || habit.friend_ids || [];
+
   const result = db.prepare(`
-    INSERT INTO habits (id, user_id, name, description, frequency, periodicity_type, periodicity_days, color)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO habits (id, user_id, owner_id, name, description, frequency, periodicity_type, periodicity_days, color, shared_with)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     habit.id || Date.now(),
+    userId,
     userId,
     habit.name,
     habit.description || '',
     habit.frequency || '🔥 Ежедневно',
     habit.periodicityType || habit.periodicity_type || 'daily',
     JSON.stringify(habit.periodicityDays || habit.periodicity_days || []),
-    habit.color || '#4A90D9'
+    habit.color || '#4A90D9',
+    JSON.stringify(friendIds)
   );
 
   const habitId = habit.id || result.lastInsertRowid;
 
-  // Initialize history (all false)
+  // Initialize history for owner (all false)
   for (let i = 0; i < 7; i++) {
-    db.prepare('INSERT OR IGNORE INTO habit_history (habit_id, day_index, done) VALUES (?, ?, ?)').run(habitId, i, 0);
+    db.prepare('INSERT OR IGNORE INTO habit_history (habit_id, user_id, day_index, done) VALUES (?, ?, ?, ?)').run(habitId, userId, i, 0);
+  }
+
+  // Initialize history for each shared friend (all false)
+  for (const fid of friendIds) {
+    for (let i = 0; i < 7; i++) {
+      db.prepare('INSERT OR IGNORE INTO habit_history (habit_id, user_id, day_index, done) VALUES (?, ?, ?, ?)').run(habitId, fid, i, 0);
+    }
   }
 
   // Link friends
-  const friendIds = habit.friendIds || habit.friend_ids || [];
   const insertFriend = db.prepare('INSERT OR IGNORE INTO habit_friends (habit_id, friend_id) VALUES (?, ?)');
   for (const fid of friendIds) {
     insertFriend.run(habitId, fid);
@@ -167,9 +200,9 @@ export function createHabit(userId: number, habit: any) {
 export function toggleHabit(habitId: number, userId: number, done: boolean) {
   const dayIndex = getMskDayIndex();
   db.prepare(`
-    INSERT INTO habit_history (habit_id, day_index, done) VALUES (?, ?, ?)
-    ON CONFLICT(habit_id, day_index) DO UPDATE SET done = ?
-  `).run(habitId, dayIndex, done ? 1 : 0, done ? 1 : 0);
+    INSERT INTO habit_history (habit_id, user_id, day_index, done) VALUES (?, ?, ?, ?)
+    ON CONFLICT(habit_id, user_id, day_index) DO UPDATE SET done = ?
+  `).run(habitId, userId, dayIndex, done ? 1 : 0, done ? 1 : 0);
 }
 
 export function deleteHabit(habitId: number, userId: number) {
