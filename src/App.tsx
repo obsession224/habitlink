@@ -35,10 +35,13 @@ interface Toast {
 }
 
 // Telegram WebApp API helper
-const tg = window.Telegram?.WebApp;
+function getTg() {
+  return window.Telegram?.WebApp;
+}
 
 // Authenticated fetch wrapper — sends Telegram initData for server-side validation
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const tg = getTg();
   const initData = tg?.initData || '';
   const headers = new Headers(options.headers);
   if (initData) {
@@ -132,6 +135,7 @@ export default function App() {
   // --- INITIALIZATION ---
   useEffect(() => {
     // 1. Initialize Telegram WebApp
+    const tg = getTg();
     if (tg) {
       tg.ready();
       tg.expand();
@@ -204,6 +208,7 @@ export default function App() {
 
   // --- HANDLE INCOMING INVITES ---
   useEffect(() => {
+    const tg = getTg();
     const urlParams = new URLSearchParams(window.location.search);
     const startParam = tg?.initDataUnsafe?.start_param || urlParams.get('startapp') || urlParams.get('invite');
     if (startParam && startParam.startsWith('invite_')) {
@@ -700,6 +705,7 @@ export default function App() {
   const handleInviteFriend = () => {
     const inviteText = `Привет! Давай вместе трекать привычки в HabitLink 🚀\n\nПерейди по ссылке и нажми "Открыть":\nhttps://t.me/habitlink_bot?start=invite_${TG_USER_ID}`;
 
+    const tg = getTg();
     if (tg) {
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/habitlink_bot?start=invite_${TG_USER_ID}`)}&text=${encodeURIComponent('Давай вместе трекать привычки! Нажми, чтобы открыть HabitLink 👇')}`;
       tg.openTelegramLink(shareUrl);
@@ -1558,7 +1564,7 @@ export default function App() {
         onClose={() => setIsProfileModalOpen(false)}
         user={user}
         TG_USER_ID={TG_USER_ID}
-        tg={tg}
+        tg={getTg()}
         showToast={showToast}
       />
 
