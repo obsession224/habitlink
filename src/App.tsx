@@ -224,41 +224,7 @@ export default function App() {
         setHabits([]);
       }
     } else {
-      // Mock habits
-      const initialHabits: Habit[] = [
-        { 
-          id: 1, 
-          name: 'Утренняя зарядка', 
-          description: '10 минут разминки для тонуса тела', 
-          done: false, 
-          frequency: '🔥 Ежедневно', 
-          color: '#4A90D9',
-          history: [true, true, false, true, true, false, true]
-        },
-        { 
-          id: 2, 
-          name: 'Чтение книг', 
-          description: 'Минимум 30 минут чтения художественной литературы', 
-          done: false, 
-          frequency: '🔥 Ежедневно', 
-          color: '#22C55E',
-          history: [true, false, true, true, false, true, false]
-        },
-        { 
-          id: 3, 
-          name: 'Пить воду', 
-          description: '8 стаканов чистой воды в течение дня', 
-          done: false, 
-          frequency: '🔥 Ежедневно', 
-          color: '#F59E0B',
-          history: [true, true, true, false, true, true, false]
-        }
-      ].map(h => ({
-        ...h,
-        done: !!h.history[todayIdx]
-      }));
-      setHabits(initialHabits);
-      localStorage.setItem(STORAGE_KEY_HABITS, JSON.stringify(initialHabits));
+      setHabits([]);
     }
 
     if (localFriends) {
@@ -276,36 +242,16 @@ export default function App() {
           // fallback
         }
       } else {
-        const mockFriendsList: Friend[] = [
-          {
-            id: 789012,
-            name: 'Мария',
-            username: 'mariya_active',
-            status: 'active',
-            habits: { 1: true, 2: false, 3: true }
-          },
-          {
-            id: 345678,
-            name: 'Дмитрий',
-            username: 'dima_run',
-            status: 'active',
-            habits: { 1: false, 2: true, 3: true }
-          }
-        ];
-        setFriends(mockFriendsList);
-        localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(mockFriendsList));
+        setFriends([]);
+        localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify([]));
       }
     }
 
     if (localRequests) {
       setFriendRequests(JSON.parse(localRequests));
     } else {
-      const mockRequests: FriendRequest[] = [
-        { id: 444555, name: 'Кирилл', username: 'kirill_run' },
-        { id: 666777, name: 'Анна', username: 'anna_habits' }
-      ];
-      setFriendRequests(mockRequests);
-      localStorage.setItem(STORAGE_KEY_REQUESTS, JSON.stringify(mockRequests));
+      setFriendRequests([]);
+      localStorage.setItem(STORAGE_KEY_REQUESTS, JSON.stringify([]));
     }
 
     // Trigger page-load animations
@@ -577,22 +523,7 @@ export default function App() {
         }
       })
       .catch(() => {
-        // Fallback for mock demo
-        setTimeout(() => {
-          showToast('Пользователь подтвердил ваш запрос автоматически (Демо) 🤝', 'success');
-          const mockFriend: Friend = {
-            id: targetId,
-            name: `Ксения #${targetId % 1000}`,
-            username: `ksenia_${targetId % 1000}`,
-            status: 'active',
-            habits: { 1: false, 2: true, 3: false }
-          };
-          setFriends(prev => {
-            const updated = [...prev.filter(f => f.id !== targetId), mockFriend];
-            localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(updated));
-            return updated;
-          });
-        }, 1500);
+        showToast('Ошибка отправки запроса. Проверьте ID и попробуйте снова.', 'error');
       });
   };
 
@@ -687,10 +618,10 @@ export default function App() {
   // Invite friend via Telegram Share URL or clipboard fallback
   const handleInviteFriend = () => {
     const inviteLink = tg 
-      ? `https://t.me/HabitLinkBot/app?startapp=invite_${TG_USER_ID}` 
+      ? `https://t.me/habitlink_bot/app?startapp=invite_${TG_USER_ID}` 
       : `${window.location.origin}?invite=invite_${TG_USER_ID}`;
 
-    const text = 'Привет! Давай вместе трекать и геймифицировать наши привычки в HabitLink Clone 🚀 Подключайся ко мне по ссылке!';
+    const text = 'Привет! Давай вместе трекать привычки в HabitLink 🚀 Подключайся ко мне по ссылке!';
 
     if (tg) {
       const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`;
