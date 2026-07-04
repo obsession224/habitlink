@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Переменные темы "High Density" */
+:root {
+  --primary: #4A90D9;
+  --primary-dark: #357ABD;
+  --bg-primary: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B7280;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --border-color: #E5E7EB;
+  --chip-bg: rgba(0, 0, 0, 0.05);
+  --header-bg: rgba(245, 247, 250, 0.85);
+}
+
+.dark {
+  --bg-primary: #1A1A1A;
+  --bg-card: #2D2D2D;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --border-color: #3D3D3D;
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --header-bg: rgba(26, 26, 26, 0.85);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  transition: background-color 0.3s, color 0.3s;
+  user-select: none;
+}
+
+/* Анимации появления */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Пружинная анимация для галочки */
+@keyframes checkmarkSpring {
+  0% {
+    transform: scale(0) rotate(-45deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-spring-check {
+  animation: checkmarkSpring 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Скрытие скроллбара */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Настройки оверлея */
+.modal-blur {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}

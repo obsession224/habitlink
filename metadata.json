@@ -1,0 +1,6 @@
+{
+  "name": "HabitLink",
+  "description": "Telegram Mini App clone for social habit tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
