@@ -266,11 +266,24 @@ export function getFriends(userId: number) {
     const habitDoneMap: Record<number, boolean> = {};
     const todayIndex = getMskDayIndex();
 
-    // Get all habits the friend has
-    const friendHabits = db.prepare('SELECT id FROM habits WHERE user_id = ?').all(r.id) as any[];
-    for (const h of friendHabits) {
-      const record = db.prepare('SELECT done FROM habit_history WHERE habit_id = ? AND day_index = ?').get(h.id, todayIndex) as any;
-      habitDoneMap[h.id] = record ? !!record.done : false;
+    // Get habits owned by the friend
+    const ownedHabits = db.prepare('SELECT id FROM habits WHERE user_id = ?').all(r.id) as any[];
+    // Get habits shared with the friend by others
+    const sharedHabits = db.prepare('SELECT id, shared_with FROM habits WHERE user_id != ? AND owner_id != ?').all(r.id, r.id) as any[];
+    const friendHabitIds = [...ownedHabits.map((h: any) => h.id)];
+
+    for (const h of sharedHabits) {
+      try {
+        const arr = JSON.parse(h.shared_with || '[]');
+        if (Array.isArray(arr) && arr.includes(r.id)) {
+          friendHabitIds.push(h.id);
+        }
+      } catch {}
+    }
+
+    for (const habitId of friendHabitIds) {
+      const record = db.prepare('SELECT done FROM habit_history WHERE habit_id = ? AND user_id = ? AND day_index = ?').get(habitId, r.id, todayIndex) as any;
+      habitDoneMap[habitId] = record ? !!record.done : false;
     }
 
     return {
