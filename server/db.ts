@@ -92,6 +92,14 @@ export function ensureUser(id: number, name: string, username?: string, photo_ur
   }
 }
 
+export function getUserById(id: number) {
+  return db.prepare('SELECT id, name, username, photo_url FROM users WHERE id = ?').get(id) as any;
+}
+
+export function getUserByUsername(username: string) {
+  return db.prepare('SELECT id, name, username, photo_url FROM users WHERE LOWER(username) = LOWER(?)').get(username) as any;
+}
+
 export function getHabits(userId: number) {
   const habits = db.prepare(`
     SELECT h.*, GROUP_CONCAT(hf.friend_id) as friend_id_str

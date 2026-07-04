@@ -83,7 +83,9 @@ export default function App() {
 
   // Form states
   const [newHabitName, setNewHabitName] = useState(''); // Shared between Sidebar and Bottom Sheet
-  const [friendIdInput, setFriendIdInput] = useState('');
+  const [friendInput, setFriendInput] = useState('');
+  const [lookupResult, setLookupResult] = useState<{ found: boolean; user?: { id: number; name: string; username?: string }; message?: string } | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
 
   // Local storage cache keys
   const STORAGE_KEY_HABITS = 'habitlink_habits_v1';
@@ -284,6 +286,39 @@ export default function App() {
     return () => {
       active = false;
     };
+  }, [TG_USER_ID]);
+
+  // --- POLLING: fetch friends & requests every 10s ---
+  useEffect(() => {
+    if (!TG_USER_ID || TG_USER_ID === 123456) return;
+
+    const poll = () => {
+      // Fetch friends
+      apiFetch(`${API_BASE_URL}/friends?tg_id=${TG_USER_ID}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.friends) {
+            setFriends(data.friends);
+            localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(data.friends));
+          }
+        })
+        .catch(() => {});
+
+      // Fetch requests
+      apiFetch(`${API_BASE_URL}/friends/requests?tg_id=${TG_USER_ID}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.requests) {
+            setFriendRequests(data.requests);
+            localStorage.setItem(STORAGE_KEY_REQUESTS, JSON.stringify(data.requests));
+          }
+        })
+        .catch(() => {});
+    };
+
+    poll(); // immediate
+    const interval = setInterval(poll, 10000);
+    return () => clearInterval(interval);
   }, [TG_USER_ID]);
 
   // --- UTILS ---
@@ -497,52 +532,68 @@ export default function App() {
     setNewHabitName('');
   };
 
-  // Send request to friend partner
-  const handleSendRequest = (e: React.FormEvent) => {
+  // Send request to friend partner (by ID or username)
+  const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!friendIdInput.trim()) return;
+    if (!friendInput.trim()) return;
 
-    const targetId = parseInt(friendIdInput.trim(), 10);
-    if (isNaN(targetId)) return;
+    const input = friendInput.trim();
+    let targetId: number | null = null;
+
+    // If input is numeric — treat as Telegram ID
+    if (/^\d{5,12}$/.test(input)) {
+      targetId = parseInt(input, 10);
+    } else {
+      // Treat as username — look up on server
+      const username = input.replace('@', '');
+      setLookupLoading(true);
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/friends/lookup?username=${encodeURIComponent(username)}`);
+        const data = await res.json();
+        setLookupLoading(false);
+        if (data.found && data.user) {
+          targetId = data.user.id;
+        } else {
+          showToast(data.message || 'Пользователь не найден', 'error');
+          return;
+        }
+      } catch {
+        setLookupLoading(false);
+        showToast('Ошибка поиска пользователя', 'error');
+        return;
+      }
+    }
+
+    if (!targetId) return;
 
     showToast('Запрос отправлен напарнику ✉️', 'info');
-    setFriendIdInput('');
+    setFriendInput('');
+    setLookupResult(null);
 
     apiFetch(`${API_BASE_URL}/friends/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ friend_id: targetId, tg_id: TG_USER_ID })
     })
-      .then(res => {
-        if (!res.ok) throw new Error('Пользователь не найден');
-        return res.json();
-      })
+      .then(res => res.json())
       .then(data => {
         if (data.success) {
-          showToast('Запрос успешно доставлен!', 'success');
+          showToast('Запрос доставлен! Напарник получит уведомление в Telegram 📨', 'success');
+        } else if (data.error === 'already_friends') {
+          showToast('Вы уже напарники', 'info');
+        } else if (data.error === 'already_pending') {
+          showToast('Запрос уже отправлен, ожидаем ответа', 'info');
+        } else if (data.error === 'user_not_found') {
+          showToast(data.message || 'Пользователь не найден в HabitLink', 'error');
         }
       })
       .catch(() => {
-        showToast('Ошибка отправки запроса. Проверьте ID и попробуйте снова.', 'error');
+        showToast('Ошибка отправки запроса', 'error');
       });
   };
 
   // Accept incoming friend request
   const handleAcceptRequest = (req: FriendRequest) => {
-    const mockFriend: Friend = {
-      id: req.id,
-      name: req.name,
-      username: req.username,
-      photo_url: req.photo_url,
-      status: 'active',
-      habits: { 1: true, 2: false, 3: false }
-    };
-
-    setFriends(prev => {
-      const updated = [...prev.filter(f => f.id !== req.id), mockFriend];
-      localStorage.setItem(STORAGE_KEY_FRIENDS, JSON.stringify(updated));
-      return updated;
-    });
     setFriendRequests(prev => {
       const updated = prev.filter(r => r.id !== req.id);
       localStorage.setItem(STORAGE_KEY_REQUESTS, JSON.stringify(updated));
@@ -555,9 +606,7 @@ export default function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ friend_id: req.id, tg_id: TG_USER_ID })
-    }).catch(() => {
-      console.warn('API Accept failed, updated locally');
-    });
+    }).catch(() => {});
   };
 
   // Reject friend request
@@ -615,25 +664,21 @@ export default function App() {
     }
   };
 
-  // Invite friend via Telegram Share URL or clipboard fallback
+  // Invite friend via Telegram share or clipboard
   const handleInviteFriend = () => {
-    const inviteLink = tg 
-      ? `https://t.me/habitlink_bot/app?startapp=invite_${TG_USER_ID}` 
-      : `${window.location.origin}?invite=invite_${TG_USER_ID}`;
-
-    const text = 'Привет! Давай вместе трекать привычки в HabitLink 🚀 Подключайся ко мне по ссылке!';
+    const inviteText = `Привет! Давай вместе трекать привычки в HabitLink 🚀\n\nПерейди по ссылке и нажми "Открыть":\nhttps://t.me/habitlink_bot?start=invite_${TG_USER_ID}`;
 
     if (tg) {
-      const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`;
-      tg.openTelegramLink(telegramShareUrl);
-      showToast('Открываем список чатов Telegram для отправки 💬', 'info');
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/habitlink_bot?start=invite_${TG_USER_ID}`)}&text=${encodeURIComponent('Давай вместе трекать привычки! Нажми, чтобы открыть HabitLink 👇')}`;
+      tg.openTelegramLink(shareUrl);
+      showToast('Открываем Telegram для отправки 💬', 'info');
     } else {
-      navigator.clipboard.writeText(inviteLink)
+      navigator.clipboard.writeText(inviteText)
         .then(() => {
-          showToast('Ссылка приглашения скопирована в буфер обмена! ✉️', 'success');
+          showToast('Ссылка скопирована! Отправь её другу в Telegram ✉️', 'success');
         })
         .catch(() => {
-          showToast('Не удалось скопировать ссылку. Скопируйте её вручную.', 'error');
+          showToast('Не удалось скопировать ссылку', 'error');
         });
     }
   };
@@ -1027,30 +1072,28 @@ export default function App() {
                   <div className="bg-[var(--bg-card)] rounded-2xl p-4 border border-[var(--border-color)] shadow-[var(--shadow-card)] space-y-4">
                     <form onSubmit={handleSendRequest} className="space-y-4">
                       <div>
-                        <label htmlFor="friend-tg-id" className="block text-[13px] font-bold text-[var(--text-secondary)] mb-1.5 pl-0.5">
-                          Telegram ID друга
+                        <label htmlFor="friend-input" className="block text-[13px] font-bold text-[var(--text-secondary)] mb-1.5 pl-0.5">
+                          Telegram ID или @username
                         </label>
                         <input
-                          id="friend-tg-id"
+                          id="friend-input"
                           type="text"
-                          pattern="[0-9]*"
-                          inputMode="numeric"
-                          placeholder="Например, 123456789"
-                          value={friendIdInput}
-                          onChange={(e) => setFriendIdInput(e.target.value.replace(/\D/g, ''))}
+                          placeholder="123456789 или @username"
+                          value={friendInput}
+                          onChange={(e) => { setFriendInput(e.target.value); setLookupResult(null); }}
                           className="w-full h-12 px-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)] font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/50 transition-all placeholder:text-[var(--text-secondary)]/60"
                         />
                         <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 pl-0.5">
-                          Допускается только числовой ID Telegram, состоящий из 9 или 10 цифр.
+                          Введи числовой ID или @username друга из Telegram
                         </p>
                       </div>
                       <button
                         type="submit"
-                        disabled={!/^\d{9,10}$/.test(friendIdInput)}
+                        disabled={!friendInput.trim() || lookupLoading}
                         className="w-full h-12 rounded-xl bg-gradient-to-r from-[#4A90D9] to-[#357ABD] hover:opacity-95 text-white font-bold text-[15px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100 cursor-pointer border-none"
                       >
                         <UserPlus size={18} />
-                        <span>Отправить запрос</span>
+                        <span>{lookupLoading ? 'Поиск...' : 'Отправить запрос'}</span>
                       </button>
                     </form>
 
@@ -1066,7 +1109,7 @@ export default function App() {
                       className="w-full h-12 rounded-xl bg-[#4A90D9]/10 hover:bg-[#4A90D9]/15 text-[#4A90D9] font-bold text-[14px] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#4A90D9]/20"
                     >
                       <Sparkles size={16} className="text-[#4A90D9]" />
-                      <span>Пригласить напарника в Telegram</span>
+                      <span>Пригласить через Telegram</span>
                     </button>
                   </div>
                 </section>

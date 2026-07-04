@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { telegramAuth } from './auth';
 import habitsRouter from './routes/habits';
 import friendsRouter from './routes/friends';
+import webhookRouter from './routes/webhook';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +25,9 @@ app.use(express.json());
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Webhook — no auth (Telegram sends updates here)
+app.use('/api/webhook', webhookRouter);
 
 // API routes with Telegram auth
 app.use('/api/habits', telegramAuth, habitsRouter);
