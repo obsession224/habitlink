@@ -84,6 +84,42 @@ db.exec(`
   );
 `);
 
+// --- Migrations ---
+// Add owner_id and shared_with to habits if missing
+const habitsInfo = db.prepare("PRAGMA table_info(habits)").all() as any[];
+if (!habitsInfo.some((c: any) => c.name === 'owner_id')) {
+  db.exec("ALTER TABLE habits ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0");
+  // Copy user_id to owner_id for existing habits
+  db.exec("UPDATE habits SET owner_id = user_id WHERE owner_id = 0");
+}
+if (!habitsInfo.some((c: any) => c.name === 'shared_with')) {
+  db.exec("ALTER TABLE habits ADD COLUMN shared_with TEXT DEFAULT '[]'");
+}
+
+// Rebuild habit_history with user_id if missing
+const historyInfo = db.prepare("PRAGMA table_info(habit_history)").all() as any[];
+if (!historyInfo.some((c: any) => c.name === 'user_id')) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS habit_history_new (
+      habit_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      day_index INTEGER NOT NULL,
+      done BOOLEAN DEFAULT 0,
+      PRIMARY KEY (habit_id, user_id, day_index),
+      FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+  db.exec(`
+    INSERT INTO habit_history_new (habit_id, user_id, day_index, done)
+    SELECT h.habit_id, hab.user_id, h.day_index, h.done
+    FROM habit_history h
+    JOIN habits hab ON h.habit_id = hab.id
+  `);
+  db.exec("DROP TABLE habit_history");
+  db.exec("ALTER TABLE habit_history_new RENAME TO habit_history");
+}
+
 export default db;
 
 // --- Helper functions ---
@@ -117,13 +153,15 @@ export function getHabits(userId: number) {
   `).all(userId) as any[];
 
   // Get habits shared with this user by friends
+  // Use comma-boundary matching: [123,456] -> ,123,456, then check for ,userId,
   const sharedHabits = db.prepare(`
     SELECT h.*, GROUP_CONCAT(hf.friend_id) as friend_id_str, u.name as owner_name
     FROM habits h
     LEFT JOIN habit_friends hf ON h.id = hf.habit_id
     JOIN users u ON u.id = h.owner_id
-    WHERE h.shared_with LIKE '%' || ? || '%'
-      AND h.owner_id != ?
+    WHERE h.owner_id != ?
+      AND (',' || REPLACE(REPLACE(h.shared_with, '[', ''), ']', '') || ',')
+          LIKE '%,' || ? || ',%'
     GROUP BY h.id
     ORDER BY h.created_at ASC
   `).all(userId, userId) as any[];

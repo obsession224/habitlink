@@ -288,11 +288,27 @@ export default function App() {
     };
   }, [TG_USER_ID]);
 
-  // --- POLLING: fetch friends & requests every 10s ---
+  // --- POLLING: fetch friends, requests & shared habits every 10s ---
   useEffect(() => {
     if (!TG_USER_ID || TG_USER_ID === 123456) return;
 
     const poll = () => {
+      // Fetch habits (includes shared habits from friends)
+      const todayIdx = getMskDayIndex();
+      apiFetch(`${API_BASE_URL}/habits?tg_id=${TG_USER_ID}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.habits) {
+            const synced = (data.habits as Habit[]).map(h => ({
+              ...h,
+              done: !!h.history[todayIdx]
+            }));
+            setHabits(synced);
+            localStorage.setItem(STORAGE_KEY_HABITS, JSON.stringify(synced));
+          }
+        })
+        .catch(() => {});
+
       // Fetch friends
       apiFetch(`${API_BASE_URL}/friends?tg_id=${TG_USER_ID}`)
         .then(r => r.json())
